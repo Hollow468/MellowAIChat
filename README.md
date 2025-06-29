@@ -1,16 +1,3 @@
-# mellowai
+# Mellow Chat
 
-MellowAI Chat 是一款界面简洁、体验温和的智能聊天应用。
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+MellowAI Chat 是一款界面简洁、体验温和的智能聊天应用。它致力于为用户提供友好、流畅的对话体验，适合需要AI聊天助手的场景。应用以简洁设计为特色，让用户能够轻松上手并享受智能对话服务。
