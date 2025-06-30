@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mellowai/Login/Login.dart';
 import 'package:get/get.dart';
-import 'package:mellowai/Register/Register.dart';
 import 'Chat/Chat.dart';
 import 'Chat/History/Controller.dart';
 import 'i18n.dart';

@@ -24,6 +24,7 @@ class AppTranslations extends Translations {
           // Chat
           'how_can_i_help': 'How can I help you my friend?',
           'ask_anything': 'Ask me anything...',
+          'thinking': 'Thinking....',
           // Settings
           'settings': 'Settings',
           'api_url': 'API URL',
@@ -75,6 +76,7 @@ class AppTranslations extends Translations {
           // Chat
           'how_can_i_help': '有什么可以帮您？',
           'ask_anything': '问我任何问题...',
+          'thinking': '思考中....',
           // Settings
           'settings': '设置',
           'api_url': '通用API地址',

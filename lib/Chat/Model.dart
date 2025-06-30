@@ -92,9 +92,15 @@ class ChatApi {
             if (jsonStr == '[DONE]') break;
             try {
               final data = jsonDecode(jsonStr);
-              final content = data['choices']?[0]?['delta']?['content'] ?? '';
-              if (content.isNotEmpty) {
-                yield ChatMessage(role: 'assistant', content: content);
+              final content = data['choices']?[0]?['delta']?['content'];
+              final reasoningContent = data['choices']?[0]?['delta']?['reasoning_content'];
+              if ((content != null && content.toString().isNotEmpty) ||
+                  (reasoningContent != null && reasoningContent.toString().isNotEmpty)) {
+                yield ChatMessage(
+                  role: 'assistant',
+                  content: content ?? '',
+                  reasoningContent: reasoningContent ?? '',
+                );
               }
             } catch (_) {}
           }

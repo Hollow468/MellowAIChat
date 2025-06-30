@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'History/Controller.dart';
 import 'History/History.dart';
 import 'Menu/Menu.dart' as menu;
 import 'Controller.dart';
 import 'Setting/Controller.dart';
-import 'Model.dart';
 
 
 class ChatPage extends StatelessWidget {
@@ -67,7 +65,44 @@ class ChatPage extends StatelessWidget {
                       color: isUser ? Colors.blue[100] : Colors.grey[200],
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Text(msg.content),
+                    child:
+                    isUser ? Text(msg.content) : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty)
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 2, bottom: 4),
+                                      child: Text(
+                                        'thinking'.tr,
+                                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                                      ),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        msg.reasoningContent!,
+                                        style: TextStyle(fontSize: 15, color: Colors.black, height: 1.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              Container(
+                                padding: const EdgeInsets.all(2),
+                                child: Text(
+                                  msg.content,
+                                  style: TextStyle(fontSize: 16, color: Colors.black, height: 1.6),
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
                 );
               },

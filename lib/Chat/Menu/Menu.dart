@@ -1,7 +1,6 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:mellowai/Chat/Setting/Settings.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mellowai/Chat/Prompt/Prompt.dart';
 
 class MenuController extends GetxController {

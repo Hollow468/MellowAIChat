@@ -9,7 +9,8 @@ import 'Model.dart';
 class ChatMessage {
   final String role;
   final String content;
-  ChatMessage({required this.role, required this.content});
+  final String? reasoningContent;
+  ChatMessage({required this.role, required this.content, this.reasoningContent});
 }
 
 class ChatController extends GetxController {
@@ -36,7 +37,7 @@ class ChatController extends GetxController {
 
   void loadFromHistory(ChatHistory history) {
     messages.assignAll(history.messages.map((m) =>
-      ChatMessage(role: m['role'] ?? '', content: m['content'] ?? '')
+      ChatMessage(role: m['role'] ?? '', content: m['content'] ?? '', reasoningContent: m['reasoningContent'] as String?)
     ));
     currentHistoryId = history.id;
   }
@@ -48,7 +49,13 @@ class ChatController extends GetxController {
           ? messages.first.content.substring(0, messages.first.content.length > 10 ? 10 : messages.first.content.length)
           : '新会话',
       createdAt: DateTime.now(),
-      messages: messages.map((m) => {'role': m.role, 'content': m.content}).toList(),
+      messages: messages.map((m) {
+        final map = {'role': m.role, 'content': m.content};
+        if (m.reasoningContent != null) {
+          map['reasoningContent'] = m.reasoningContent!;
+        }
+        return map;
+      }).toList(),
     );
   }
 
@@ -92,6 +99,7 @@ class ChatController extends GetxController {
     messages.add(ChatMessage(role: 'assistant', content: ''));
     int aiIndex = messages.length - 1;
     String aiContent = '';
+    String aiReasoningContent = '';
 
     await for (final msg in ChatApi.sendChatRequestStream(
       token: token,
@@ -111,8 +119,13 @@ class ChatController extends GetxController {
       stop: const [],
     )) {
       if (msg.role == 'assistant') {
-        aiContent += msg.content;
-        messages[aiIndex] = ChatMessage(role: 'assistant', content: aiContent);
+        if (msg.content.isNotEmpty) aiContent += msg.content;
+        if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty) aiReasoningContent += msg.reasoningContent!;
+        messages[aiIndex] = ChatMessage(
+          role: 'assistant',
+          content: aiContent,
+          reasoningContent: aiReasoningContent.isNotEmpty ? aiReasoningContent : null,
+        );
         messages.refresh();
       }
     }
