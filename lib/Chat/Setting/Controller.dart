@@ -11,14 +11,14 @@ class SettingsTabController extends GetxController {
 }
 
 class SettingsController extends GetxController {
-  var token = ''.obs;
+  var apitoken = ''.obs;
   var model = ''.obs;
   var contextLimit = 10.obs;
   var locale = const Locale('zh', 'CN').obs;
 
   Future<void> LoadConfig() async {
     final pref = await SharedPreferences.getInstance();
-    token.value = pref.getString('token') ?? '';
+    apitoken.value = pref.getString('apitoken') ?? '';
     model.value = pref.getString('model') ?? '';
     contextLimit.value = pref.getInt('contextLimit') ?? 10;
     final langCode = pref.getString('locale_lang') ?? 'zh';
@@ -28,7 +28,7 @@ class SettingsController extends GetxController {
 
   Future<void> SaveConfig() async {
     final pref = await SharedPreferences.getInstance();
-    await pref.setString('token', token.value);
+    await pref.setString('apitoken', apitoken.value);
     await pref.setString('model', model.value);
     await pref.setInt('contextLimit', contextLimit.value);
     await pref.setString('locale_lang', locale.value.languageCode);

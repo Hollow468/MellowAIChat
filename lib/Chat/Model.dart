@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'Controller.dart';
 
 class ChatApi {
-  static Future<String> sendChatRequest({required String token, required String model, required String content}) async {
-    if (token.isEmpty || content.isEmpty) {
+  static Future<String> sendChatRequest({required String apitoken, required String model, required String content}) async {
+    if (apitoken.isEmpty || content.isEmpty) {
       return 'Token或消息内容不能为空';
     }
     final url = Uri.parse('https://api.siliconflow.cn/v1/chat/completions');
     final headers = {
-      'Authorization': 'Bearer ' + token,
+      'Authorization': 'Bearer ' + apitoken,
       'Content-Type': 'application/json',
     };
     final body = jsonEncode({

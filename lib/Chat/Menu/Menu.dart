@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:mellowai/Chat/Setting/Settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mellowai/Chat/Prompt/Prompt.dart';
 
 class MenuController extends GetxController {
 
@@ -45,7 +46,14 @@ class MenuView extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.book),
             title: Text('prompt'.tr),
-            onTap: () {},
+            onTap: () {Navigator.of(context).pop();
+              Future.delayed(const Duration(milliseconds: 100), () {
+                showDialog(
+                    context: context,
+                    builder: (context) => PromptDialog(),
+                );
+              });
+            },
           ),
           ListTile(
             leading: const Icon(Icons.exit_to_app),

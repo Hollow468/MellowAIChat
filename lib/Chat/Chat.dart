@@ -14,7 +14,7 @@ class ChatPage extends StatelessWidget {
   final SettingsController settingsController = Get.put(SettingsController());
 
   Future<void> handleSend() async {
-    final token = settingsController.token.value;
+    final token = settingsController.apitoken.value;
     final model = settingsController.model.value.isNotEmpty ? settingsController.model.value : "Qwen/Qwen2.5-VL-72B-Instruct";
     final content = chatController.ask.text.trim();
     if (content.isEmpty) return;
@@ -24,6 +24,11 @@ class ChatPage extends StatelessWidget {
 
     // 固定上下文条数限制为20
     final contextMessages = <Map<String, String>>[];
+    // 插入system prompt
+    contextMessages.add({
+      'role': 'system',
+      'content': chatController.systemPrompt?.isNotEmpty == true ? chatController.systemPrompt! : 'You are helpful assistant',
+    });
     final history = chatController.messages.length > 20
         ? chatController.messages.sublist(chatController.messages.length - 20)
         : List<ChatMessage>.from(chatController.messages);

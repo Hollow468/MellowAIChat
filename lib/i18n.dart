@@ -27,8 +27,7 @@ class AppTranslations extends Translations {
       'settings': 'Settings',
       'api_url': 'API URL',
       'api_url_hint': 'e.g. https://api.siliconflow.cn/v1',
-      'token': 'API Token',
-      'token_hint': 'Please enter API Token',
+      'api_token': 'API Token',
       'connect_test': 'Connection Test',
       'connect_test_failed': 'Connection Test Failed',
       'connect_test_success': 'Connection Test Success',
@@ -68,7 +67,7 @@ class AppTranslations extends Translations {
       // Settings
       'settings': '设置',
       'api_url': '通用API地址',
-      'token': 'API密钥',
+      'api_token': 'API密钥',
       'connect_test': '连接测试',
       'connect_test_failed': '连接测试失败',
       'connect_test_success': '连接测试成功',

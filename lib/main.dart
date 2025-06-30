@@ -5,9 +5,11 @@ import 'package:mellowai/Register/Register.dart';
 import 'Chat/Chat.dart';
 import 'i18n.dart';
 import 'Chat/Setting/Controller.dart';
+import 'package:get_storage/get_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await GetStorage.init();
   final settingsController = Get.put(SettingsController());
   await settingsController.LoadConfig();
   runApp(MyApp());
@@ -23,7 +25,7 @@ class MyApp extends StatelessWidget {
       translations: AppTranslations(),
       locale: settingsController.locale.value,
       fallbackLocale: const Locale('en', 'US'),
-      initialRoute: '/login',
+      initialRoute: '/chat',
       getPages: [
         GetPage(name: '/login', page: ()=> Login()),
         GetPage(name: '/signup', page: ()=>RegisterPage()),

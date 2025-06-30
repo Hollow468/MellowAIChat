@@ -19,7 +19,7 @@ class _SettingsState extends State<Settings> {
   void initState() {
     super.initState();
     settingsController.LoadConfig().then((_) {
-      tokenController.text = settingsController.token.value;
+      tokenController.text = settingsController.apitoken.value;
       setState(() {
         isLoaded = true;
       });
@@ -95,13 +95,13 @@ class _SettingsState extends State<Settings> {
                                 const SizedBox(height: 16),
                                 Align(
                                   alignment: Alignment.centerLeft,
-                                  child: Text('token'.tr, style: TextStyle(fontSize: 16)),
+                                  child: Text('api_token'.tr, style: TextStyle(fontSize: 16)),
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
                                   controller: tokenController,
                                   obscureText: true,
-                                  onChanged: (v) => settingsController.token.value = v,
+                                  onChanged: (v) => settingsController.apitoken.value = v,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
                                     suffixIcon: Icon(Icons.visibility),
@@ -112,7 +112,7 @@ class _SettingsState extends State<Settings> {
                                   onPressed: settingsModel.loading.value
                                       ? null
                                       : () async {
-                                    await settingsModel.fetchModels(settingsController.token.value);
+                                    await settingsModel.fetchModels(settingsController.apitoken.value);
                                     if (settingsModel.error.isNotEmpty) {
                                       showDialog(
                                         context: context,
@@ -294,7 +294,7 @@ class _SettingsState extends State<Settings> {
                     const SizedBox(width: 8),
                     ElevatedButton(
                       onPressed: () async {
-                        settingsController.token.value = tokenController.text;
+                        settingsController.apitoken.value = tokenController.text;
                         await settingsController.SaveConfig();
                         Navigator.of(context).pop();
                       },
