@@ -87,7 +87,7 @@ class ChatPage extends StatelessWidget {
                                         color: Colors.grey[100],
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      child: Text(
+                                      child: SelectableText(
                                         msg.reasoningContent!,
                                         style: TextStyle(fontSize: 15, color: Colors.black, height: 1.5),
                                       ),
@@ -96,7 +96,7 @@ class ChatPage extends StatelessWidget {
                                 ),
                               Container(
                                 padding: const EdgeInsets.all(2),
-                                child: Text(
+                                child: SelectableText(
                                   msg.content,
                                   style: TextStyle(fontSize: 16, color: Colors.black, height: 1.6),
                                 ),
