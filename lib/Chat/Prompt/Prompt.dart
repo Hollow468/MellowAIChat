@@ -31,7 +31,7 @@ class _PromptDialogState extends State<PromptDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("提示词管理", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+               Text("prompt_manage".tr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               showCreateForm
                   ? Container(
@@ -44,8 +44,8 @@ class _PromptDialogState extends State<PromptDialog> {
                         children: [
                           TextField(
                             controller: nameController,
-                            decoration: const InputDecoration(
-                              hintText: "名称",
+                            decoration:  InputDecoration(
+                              hintText: "prompt_name".tr,
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
@@ -54,8 +54,8 @@ class _PromptDialogState extends State<PromptDialog> {
                           TextField(
                             controller: promptController,
                             maxLines: 3,
-                            decoration: const InputDecoration(
-                              hintText: "人物设定（Prompt）",
+                            decoration:  InputDecoration(
+                              hintText: "prompt_content".tr,
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
@@ -69,7 +69,7 @@ class _PromptDialogState extends State<PromptDialog> {
                                     showCreateForm = false;
                                   });
                                 },
-                                child: const Text("取消"),
+                                child:  Text("cancel".tr),
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton(
@@ -88,7 +88,7 @@ class _PromptDialogState extends State<PromptDialog> {
                                     });
                                   }
                                 },
-                                child: const Text("保存"),
+                                child:  Text("save".tr),
                               ),
                             ],
                           ),
@@ -99,8 +99,8 @@ class _PromptDialogState extends State<PromptDialog> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
-                        label: const Text(
-                          "创建新的提示词",
+                        label:  Text(
+                          "create_new_prompt".tr,
                           style: TextStyle(color: Colors.blue),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -120,7 +120,7 @@ class _PromptDialogState extends State<PromptDialog> {
 
               Row(
                 children: [
-                  const Text("我的提示词", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                   Text("my_prompt".tr, style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Container(
@@ -148,7 +148,7 @@ class _PromptDialogState extends State<PromptDialog> {
                       chatController.systemPrompt = prompt.prompt;
                       await chatController.saveSystemPrompt();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已应用提示词：${prompt.name}')),
+                        SnackBar(content: Text('${'prompt_apply_success'.tr}：${prompt.name}')),
                       );
                     },
                   ),
@@ -159,7 +159,7 @@ class _PromptDialogState extends State<PromptDialog> {
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text("关闭"),
+                  child:  Text("cancel".tr),
                 ),
               ),
             ],

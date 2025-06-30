@@ -29,8 +29,8 @@ class MyApp extends StatelessWidget {
       fallbackLocale: const Locale('en', 'US'),
       initialRoute: '/chat',
       getPages: [
-        GetPage(name: '/login', page: ()=> Login()),
-        GetPage(name: '/signup', page: ()=>RegisterPage()),
+        // GetPage(name: '/login', page: ()=> Login()),
+        // GetPage(name: '/signup', page: ()=>RegisterPage()),
         GetPage(name: '/chat', page: ()=> ChatPage())
       ],
     ));

@@ -23,6 +23,8 @@ class _SettingsState extends State<Settings> {
       setState(() {
         isLoaded = true;
       });
+      // 自动拉取模型列表
+      settingsModel.fetchModels(settingsController.apitoken.value);
     });
   }
 
@@ -108,35 +110,6 @@ class _SettingsState extends State<Settings> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Obx(() => ElevatedButton(
-                                  onPressed: settingsModel.loading.value
-                                      ? null
-                                      : () async {
-                                    await settingsModel.fetchModels(settingsController.apitoken.value);
-                                    if (settingsModel.error.isNotEmpty) {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => AlertDialog(
-                                          title:  Text('connect_test_failed'.tr),
-                                          content: Text(settingsModel.error.value),
-                                          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('确定'))],
-                                        ),
-                                      );
-                                    } else {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => AlertDialog(
-                                          title:  Text('connect_test_success'.tr),
-                                          content: Text('${'model_count'.tr}: ${settingsModel.models.length}'),
-                                          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('确定'))],
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: settingsModel.loading.value
-                                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                      :  Text('connect_test'.tr),
-                                )),
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text('model'.tr, style: TextStyle(fontSize: 16)),
@@ -168,6 +141,19 @@ class _SettingsState extends State<Settings> {
                                                 ))
                                             .toList(),
                                     onChanged: (v) => settingsController.model.value = v ?? '',
+                                    onTap: () async {
+                                      await settingsModel.fetchModels(settingsController.apitoken.value);
+                                      if (settingsModel.error.isNotEmpty) {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => AlertDialog(
+                                            title:  Text('connect_test_failed'.tr),
+                                            content: Text(settingsModel.error.value),
+                                            actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('确定'))],
+                                          ),
+                                        );
+                                      }
+                                    },
                                     decoration: InputDecoration(
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),

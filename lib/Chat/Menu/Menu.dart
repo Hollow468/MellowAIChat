@@ -55,18 +55,7 @@ class MenuView extends StatelessWidget {
               });
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.exit_to_app),
-            title: Text('sign_out'.tr),
-            onTap: () async {
-              Navigator.of(context).pop();
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('token');
-              await prefs.remove('model');
-              await prefs.remove('contextLimit');
-              Get.offAllNamed('/login');
-            },
-          ),
+
         ],
       ),
     );

@@ -26,7 +26,7 @@ class HistoryDrawer extends StatelessWidget {
                       chatController.currentHistoryId = null;
                       final newHistory = ChatHistory(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: '新会话',
+                        title: 'new_chat'.tr,
                         createdAt: DateTime.now(),
                         messages: [],
                       );
@@ -35,7 +35,7 @@ class HistoryDrawer extends StatelessWidget {
                       Navigator.of(context).pop();
                     },
                     icon: Icon(Icons.add),
-                    label: Text('开启新会话'),
+                    label: Text('open_new_chat'.tr),
                   ),
                 ],
               ),

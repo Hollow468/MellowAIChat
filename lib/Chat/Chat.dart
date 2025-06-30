@@ -37,7 +37,7 @@ class ChatPage extends StatelessWidget {
         title: Obx(() => Text(
           settingsController.model.value.isNotEmpty
               ? settingsController.model.value
-              : 'Deepseek-R1',
+              : 'MellowAi',
           style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
         )),
         centerTitle: true,
