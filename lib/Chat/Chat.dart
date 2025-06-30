@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'History/Controller.dart';
+import 'History/History.dart';
 import 'Menu/Menu.dart' as menu;
 import 'Controller.dart';
 import 'Setting/Controller.dart';
 import 'Model.dart';
-import 'dart:convert';
+
 
 class ChatPage extends StatelessWidget {
   ChatPage({super.key});
@@ -14,64 +16,16 @@ class ChatPage extends StatelessWidget {
   final SettingsController settingsController = Get.put(SettingsController());
 
   Future<void> handleSend() async {
-    final token = settingsController.apitoken.value;
-    final model = settingsController.model.value.isNotEmpty ? settingsController.model.value : "Qwen/Qwen2.5-VL-72B-Instruct";
-    final content = chatController.ask.text.trim();
-    if (content.isEmpty) return;
-
-    chatController.messages.add(ChatMessage(role: 'user', content: content));
-    chatController.ask.clear();
-
-    // 固定上下文条数限制为20
-    final contextMessages = <Map<String, String>>[];
-    // 插入system prompt
-    contextMessages.add({
-      'role': 'system',
-      'content': chatController.systemPrompt?.isNotEmpty == true ? chatController.systemPrompt! : 'You are helpful assistant',
-    });
-    final history = chatController.messages.length > 20
-        ? chatController.messages.sublist(chatController.messages.length - 20)
-        : List<ChatMessage>.from(chatController.messages);
-    for (final msg in history) {
-      contextMessages.add({
-        'role': msg.role,
-        'content': msg.content,
-      });
-    }
-    contextMessages.add({'role': 'user', 'content': content});
-
-    chatController.messages.add(ChatMessage(role: 'assistant', content: ''));
-    int aiIndex = chatController.messages.length - 1;
-    String aiContent = '';
-
-    await for (final msg in ChatApi.sendChatRequestStream(
-      token: token,
-      model: model,
-      content: '',
-      messages: contextMessages,
-      stream: true,
-      maxTokens: 512,
-      enableThinking: true,
-      thinkingBudget: 4096,
-      minP: 0.05,
-      temperature: 0.7,
-      topP: 0.7,
-      topK: 50,
-      frequencyPenalty: 0.5,
-      n: 1,
-      stop: const [],
-    )) {
-      if (msg.role == 'assistant') {
-        aiContent += msg.content;
-        chatController.messages[aiIndex] = ChatMessage(role: 'assistant', content: aiContent);
-        chatController.messages.refresh();
-      }
-    }
+    await chatController.handleSendAndSaveHistory(settingsController);
   }
 
   @override
   Widget build(BuildContext context) {
+
+    Future.microtask(() => chatController.loadLastSession());
     return Scaffold(
+      drawer: HistoryDrawer(),
+      drawerEdgeDragWidth: 30,
       backgroundColor: const Color(0xFFF7F8FA),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F8FA),
