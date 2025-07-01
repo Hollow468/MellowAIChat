@@ -1,6 +1,9 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:mellowai/Chat/ApiProvide.dart';
+import 'package:mellowai/Chat/Setting/Widget/Sliconflow.dart';
+import 'package:mellowai/Chat/Setting/Widget/Gemini.dart';
 
 class SettingsTabController extends GetxController {
   var tabIndex = 0.obs;
@@ -34,4 +37,18 @@ class SettingsController extends GetxController {
     await pref.setString('locale_lang', locale.value.languageCode);
     await pref.setString('locale_country', locale.value.countryCode ?? '');
   }
+
+  var provider = ApiProvider.siliconflow.obs;
+  Widget GetProvideSettings() {
+    switch (provider.value) {
+      case ApiProvider.openai:
+
+      case ApiProvider.gemini:
+        return GeminiSettingsWidget(controller: this);
+      case ApiProvider.siliconflow:
+      default:
+        return SiliconflowSettingsWidget(controller: this);
+    }
+  }
 }
+
