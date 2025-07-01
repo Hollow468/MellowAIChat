@@ -13,14 +13,12 @@ class Settings extends StatefulWidget {
 class _SettingsState extends State<Settings> {
   final SettingsController settingsController = Get.put(SettingsController());
   final SettingsModel settingsModel = Get.put(SettingsModel());
-  final TextEditingController tokenController = TextEditingController();
   bool isLoaded = false;
 
   @override
   void initState() {
-    var initState = super.initState();
+    super.initState();
     settingsController.LoadConfig().then((_) {
-      tokenController.text = settingsController.apitoken.value;
       setState(() {
         isLoaded = true;
       });
@@ -31,7 +29,6 @@ class _SettingsState extends State<Settings> {
 
   @override
   void dispose() {
-    tokenController.dispose();
     super.dispose();
   }
 
@@ -206,7 +203,6 @@ class _SettingsState extends State<Settings> {
                     const SizedBox(width: 8),
                     ElevatedButton(
                       onPressed: () async {
-                        settingsController.apitoken.value = tokenController.text;
                         await settingsController.SaveConfig();
                         Navigator.of(context).pop();
                       },
