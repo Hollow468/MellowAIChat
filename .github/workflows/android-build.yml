@@ -1,64 +1,123 @@
-name: Flutter CI - Build Android
+name: 打包并发布
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch: # 手动触发工作流
 
 jobs:
-  build-android:
-    name: Build Android APK and AAB
+  rebuild-android:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      # 检出仓库代码
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          token: ${{ secrets.GITHUB_TOKEN }} # 确保检出时使用正确的权限
+          fetch-depth: 0 # 获取完整历史以便检查所有标签
 
-      - name: Set up Android NDK
-        uses: android-actions/setup-android@v3
-        with:
-          ndk-version: '27.0.12077973'
-
-      - name: Accept Android SDK Licenses
-        run: yes | sdkmanager --licenses
-
-      - name: Set up Flutter
+      # 设置 Flutter 环境
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.5'
+          flutter-version: '3.32.5' # 保持 3.32.5，确保 Dart SDK 兼容
           channel: 'stable'
-          cache: true
 
-      - name: Verify Flutter and Dart Versions
+      # 缓存 Flutter 依赖以加速后续构建
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      # 获取 Flutter 依赖
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: ./
+
+      # 删除现有的 Android 目录
+      - name: Delete existing Android directory
         run: |
-          flutter --version
-          dart --version
+          rm -rf android
+        working-directory: ./
 
-      - name: Clean Project
+      # 使用 Flutter 重新生成 Android 目录
+      - name: Rebuild Android directory
+        run: |
+          flutter create --platforms=android .
+        working-directory: ./
+
+      # 清理并重新生成 Android 构建文件
+      - name: Clean and regenerate build files
         run: |
           flutter clean
           flutter pub get
-
-      - name: Build Android
-        run: |
-          flutter build apk --release
-          flutter build appbundle --release
         working-directory: ./
 
-      - name: Upload Artifacts
+      # 打包 Android APK（发布模式）
+      - name: Build Android APK
+        run: |
+          flutter build apk --release
+        working-directory: ./
+
+      # 上传 APK 作为 artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-build
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
-          retention-days: 7
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7 # artifact 保留 7 天
+
+      # 生成递增版本标签
+      - name: Generate incremental version tag
+        id: version
+        run: |
+          # 获取所有以 v1. 开头的标签并按版本号排序
+          LATEST_TAG=$(git tag -l 'v1.*' | sort -V | tail -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            # 如果没有标签，从 v1.0.0 开始
+            NEW_TAG="v1.0.0"
+          else
+            # 解析最新标签的版本号（格式 v1.x.y）
+            VERSION=$(echo $LATEST_TAG | sed 's/v1\.//')
+            MAJOR=1
+            MINOR=$(echo $VERSION | cut -d. -f1)
+            PATCH=$(echo $VERSION | cut -d. -f2)
+            # 递增补丁版本，如果达到 9，则递增次版本并重置补丁版本
+            if [ $PATCH -ge 9 ]; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+            NEW_TAG="v1.$MINOR.$PATCH"
+          fi
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+        shell: bash
+
+      # 创建 GitHub Release 并上传 APK
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.NEW_TAG }} # 使用动态生成的标签
+          name: Release ${{ env.NEW_TAG }}
+          body: |
+            Automated release of Flutter Android APK.
+            Generated from commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 提交 Android 目录更改到仓库
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Action'
+          git add android/
+          git commit -m "Rebuild Android directory via GitHub Actions" || echo "No changes to commit"
+          git push origin HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
