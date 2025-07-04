@@ -1,9 +1,9 @@
-# .github/workflows/release.yml
+# .github/workflows/android-build.yml
 
 name: 打包并发布
 
 on:
-  workflow_dispatch: # 手动触发工作流
+  workflow_dispatch:
 
 jobs:
   rebuild-android:
@@ -24,110 +24,105 @@ jobs:
           flutter-version: '3.22.2'
           channel: 'stable'
           cache: true
+      
+      # 3. 强制替换 pubspec.yaml 中的 SDK 版本约束
+      - name: Force replace SDK version constraint in pubspec.yaml
+        env:
+          SDK_CONSTRAINT: "'>=3.22.2 <4.0.0'"
+        run: |
+          pip install yq
+          yq -i '.environment.sdk = env(SDK_CONSTRAINT)' pubspec.yaml
+          echo "--- Verifying pubspec.yaml SDK constraint ---"
+          grep -A 2 "environment:" pubspec.yaml
 
-      # 3. 获取 Flutter 依赖
+      # 4. 获取 Flutter 依赖
       - name: Install dependencies
         run: flutter pub get
-        working-directory: ./
 
-      # 4. 设置 Android SDK 并自动接受许可证
+      # 5. 设置 Android SDK 并自动接受许可证
       - name: Setup Android SDK and auto-accept licenses
         uses: android-actions/setup-android@v3
 
-      # =================================================================
-      # 5.【新增步骤】强制替换 build.gradle 中的 buildToolsVersion
-      #    您可以在这里定义权威的构建工具版本。
+      # 6. 强制替换 build.gradle 中的 buildToolsVersion
       - name: Force replace buildToolsVersion in build.gradle
         env:
-          # 在这里定义你希望强制使用的构建工具版本
           BUILD_TOOLS_VERSION: "34.0.0"
         run: |
           TARGET_FILE="android/app/build.gradle"
-          echo "Forcing buildToolsVersion to ${{ env.BUILD_TOOLS_VERSION }} in $TARGET_FILE"
-          
-          if [ -f "$TARGET_FILE" ]; then
-            # 使用 sed 命令进行替换。这个正则表达式会匹配 "buildToolsVersion" 后面跟着的任意版本号字符串
-            sed -i -E "s/buildToolsVersion \".*\"/buildToolsVersion \"${{ env.BUILD_TOOLS_VERSION }}\"/" $TARGET_FILE
-            echo "Replacement complete."
-            
-            # 验证替换结果
-            echo "--- Verifying file content ---"
-            grep "buildToolsVersion" $TARGET_FILE
-            echo "------------------------------"
-          else
-            echo "Error: $TARGET_FILE not found!"
-            exit 1
-          fi
-      # =================================================================
+          sed -i -E "s/buildToolsVersion \".*\"/buildToolsVersion \"${{ env.BUILD_TOOLS_VERSION }}\"/" $TARGET_FILE
+          echo "--- Verifying build.gradle buildToolsVersion ---"
+          grep "buildToolsVersion" $TARGET_FILE
 
-      # 6. 清理项目
+      # 7. 清理项目
       - name: Clean project
         run: flutter clean
-        working-directory: ./
 
-      # 7. 生成递增版本标签
+      # 8. 生成递增版本标签 (保持不变)
       - name: Generate incremental version tag
         id: version
         run: |
-          echo "Generating version tag..."
+          # ... (您的版本生成逻辑)
           LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            NEW_TAG="v1.0.0"
-          else
-            VERSION_PARTS=(${LATEST_TAG//./ })
-            MAJOR=$(echo ${VERSION_PARTS[0]} | sed 's/v//')
-            MINOR=${VERSION_PARTS[1]}
-            PATCH=${VERSION_PARTS[2]}
-            if [ $PATCH -ge 9 ]; then
-              PATCH=0
-              MINOR=$((MINOR + 1))
-            else
-              PATCH=$((PATCH + 1))
-            fi
-            NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          fi
+          if [ -z "$LATEST_TAG" ]; then NEW_TAG="v1.0.0"; else VERSION_PARTS=(${LATEST_TAG//./ }); MAJOR=$(echo ${VERSION_PARTS[0]} | sed 's/v//'); MINOR=${VERSION_PARTS[1]}; PATCH=${VERSION_PARTS[2]}; if [ $PATCH -ge 9 ]; then PATCH=0; MINOR=$((MINOR + 1)); else PATCH=$((PATCH + 1)); fi; NEW_TAG="v$MAJOR.$MINOR.$PATCH"; fi
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
           echo "Generated version: $NEW_TAG"
         shell: bash
 
-      # 8. 更新 pubspec.yaml 中的版本号
-      - name: Update pubspec.yaml version
+      # 9. 更新 pubspec.yaml 中的应用版本号 (保持不变)
+      - name: Update pubspec.yaml app version
         run: |
           VERSION_NUMBER=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
           BUILD_NUMBER=$(( $(git rev-list --count HEAD) + 1000 ))
-          pip install yq
           yq -i ".version = \"${VERSION_NUMBER}+${BUILD_NUMBER}\"" pubspec.yaml
           echo "Updated pubspec.yaml version to ${VERSION_NUMBER}+${BUILD_NUMBER}"
-          cat pubspec.yaml
-        working-directory: ./
 
-      # 9. 恢复签名密钥
-      - name: Restore keystore if available
-        if: ${{ secrets.KEYSTORE_BASE64 && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
+      # ================== 修复后的签名和构建步骤 ==================
+
+      # 10. 恢复签名密钥
+      # 修复了 if 条件，使其更稳健
+      - name: Restore keystore
+        id: restore_keystore
+        if: |
+          secrets.KEYSTORE_BASE64 != '' &&
+          secrets.KEYSTORE_KEY_ALIAS != '' &&
+          secrets.KEYSTORE_PASSWORD != '' &&
+          secrets.KEY_PASSWORD != ''
         run: |
-          echo "Restoring keystore..."
+          echo "Restoring keystore from secrets..."
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
           echo "Keystore restored."
-        working-directory: ./
 
-      # 10. 打包并签名 Android App
-      - name: Build Android App
-        run: flutter build apk --release --split-per-abi
-        working-directory: ./
+      # 11. 打包并签名 Android App
+      # 关键修复：将 secrets 作为环境变量注入，供 build.gradle 使用
+      - name: Build and Sign Android App
+        # 仅当上一步 "restore_keystore" 成功执行时，才注入环境变量
+        env:
+          KEYSTORE_KEY_ALIAS: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEYSTORE_KEY_ALIAS || '' }}
+          KEYSTORE_PASSWORD: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEYSTORE_PASSWORD || '' }}
+          KEY_PASSWORD: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEY_PASSWORD || '' }}
+        run: |
+          if [ "${{ steps.restore_keystore.outcome }}" == "success" ]; then
+            echo "Attempting to build SIGNED APK..."
+          else
+            echo "Secrets not provided or keystore restore failed. Attempting to build UNSIGNED APK..."
+          fi
+          flutter build apk --release --split-per-abi
 
-      # 11. 查找构建产物 (APK)
+      # ==========================================================
+
+      # 12. 查找构建产物 (APK)
       - name: Find Release APK
         id: find_apk
         run: |
+          # ... (保持不变)
           APK_PATH=$(find build/app/outputs/flutter-apk -name "app-*-release.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "Error: Release APK not found!"
-            exit 1
-          fi
+          if [ -z "$APK_PATH" ]; then echo "Error: Release APK not found!"; exit 1; fi
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK at: $APK_PATH"
 
-      # 12. 上传构建产物 (Artifact)
+      # ... (后续上传和发布步骤保持不变)
+      
+      # 13. 上传构建产物 (Artifact)
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -135,22 +130,17 @@ jobs:
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 7
 
-      # 13. 提交 pubspec.yaml 的版本更新
+      # 14. 提交 pubspec.yaml 的版本更新
       - name: Commit and push version changes
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add pubspec.yaml
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "chore: bump version to ${{ env.NEW_TAG }}"
-            git push
-          fi
+          if git diff --staged --quiet; then echo "No changes to commit."; else git commit -m "chore: bump version to ${{ env.NEW_TAG }} and align configs"; git push; fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 14. 创建 GitHub Release 并上传产物
+      # 15. 创建 GitHub Release 并上传产物
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -158,9 +148,8 @@ jobs:
           name: Release ${{ env.NEW_TAG }}
           body: |
             🎉 **Release ${{ env.NEW_TAG }}**
-
-            Automated release of Flutter Android APK.
-            Commit: `${{ github.sha }}`
+            - Signed APK: ${{ steps.restore_keystore.outcome == 'success' }}
+            - Commit: `${{ github.sha }}`
           draft: false
           prerelease: false
           files: ${{ steps.find_apk.outputs.apk_path }}
