@@ -37,38 +37,12 @@ jobs:
         run: flutter pub get
         working-directory: ./
 
-      # 删除现有的 Android 目录
-      - name: Delete existing Android directory
-        run: |
-          rm -rf android
-        working-directory: ./
-
-      # 使用 Flutter 重新生成 Android 目录
-      - name: Rebuild Android directory
-        run: |
-          flutter create --platforms=android .
-        working-directory: ./
-
-      # 清理并重新生成 Android 构建文件
+      # 清理并重新生成构建文件
       - name: Clean and regenerate build files
         run: |
           flutter clean
           flutter pub get
         working-directory: ./
-
-      # 打包 Android APK（发布模式）
-      - name: Build Android APK
-        run: |
-          flutter build apk --release
-        working-directory: ./
-
-      # 上传 APK 作为 artifact
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7 # artifact 保留 7 天
 
       # 生成递增版本标签
       - name: Generate incremental version tag
@@ -97,6 +71,48 @@ jobs:
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
         shell: bash
 
+      # 更新 pubspec.yaml 中的版本号
+      - name: Update pubspec.yaml version
+        run: |
+          # 从 NEW_TAG 中去掉 'v' 前缀以匹配 pubspec.yaml 的版本号格式（x.y.z）
+          VERSION=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
+          PUBSPEC_FILE="pubspec.yaml"
+          # 检查 pubspec.yaml 是否存在
+          if [ -f "$PUBSPEC_FILE" ]; then
+            # 使用 sed 更新 version 字段（假设格式为 version: x.y.z 或 version: x.y.z+build）
+            sed -i "s/version: [0-9]\+\.[0-9]\+\.[0-9]\+\(+[0-9]\+\)\?/version: $VERSION/" "$PUBSPEC_FILE"
+            echo "Updated pubspec.yaml version to $VERSION"
+          else
+            echo "pubspec.yaml not found!"
+            exit 1
+          fi
+        working-directory: ./
+
+      # 打包 Android APK（发布模式）
+      - name: Build Android APK
+        run: |
+          flutter build apk --release
+        working-directory: ./
+
+      # 上传 APK 作为 artifact
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7 # artifact 保留 7 天
+
+      # 提交 pubspec.yaml 更改到仓库
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'actions@github.com'
+          git add pubspec.yaml
+          git commit -m "Update pubspec.yaml version to ${{ env.NEW_TAG }}" || echo "No changes to commit"
+          git push origin HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # 创建 GitHub Release 并上传 APK
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -109,15 +125,5 @@ jobs:
           draft: false
           prerelease: false
           files: build/app/outputs/flutter-apk/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 提交 Android 目录更改到仓库
-      - name: Commit and push changes
-        run: |
-          git config --global user.name 'GitHub Action'
-          git add android/
-          git commit -m "Rebuild Android directory via GitHub Actions" || echo "No changes to commit"
-          git push origin HEAD
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
