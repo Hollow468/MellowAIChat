@@ -17,7 +17,18 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # 2. 设置 Flutter 环境
+      # ================== 安装正确的工具 ==================
+      # 2. 安装 yq (Go 语言版 - 社区标准)
+      - name: Install yq (Go binary)
+        run: |
+          echo "Installing Mike Farah's yq (Go binary)..."
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "yq version:"
+          yq --version
+      # ==================================================
+
+      # 3. 设置 Flutter 环境
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -25,26 +36,25 @@ jobs:
           channel: 'stable'
           cache: true
       
-      # 3. 强制替换 pubspec.yaml 中的 SDK 版本约束
+      # 4. 强制替换 pubspec.yaml 中的 SDK 版本约束
       - name: Force replace SDK version constraint in pubspec.yaml
         env:
           SDK_CONSTRAINT: "'>=3.22.2 <4.0.0'"
         run: |
-          pip install yq
-          # 修正：为 yq -i 命令添加 -y 参数，以指定YAML输出格式
-          yq -i -y '.environment.sdk = env(SDK_CONSTRAINT)' pubspec.yaml
+          # 使用新版 yq 的标准语法
+          yq eval -i '.environment.sdk = strenv(SDK_CONSTRAINT)' pubspec.yaml
           echo "--- Verifying pubspec.yaml SDK constraint ---"
-          grep -A 2 "environment:" pubspec.yaml
+          yq eval '.environment' pubspec.yaml
 
-      # 4. 获取 Flutter 依赖
+      # 5. 获取 Flutter 依赖
       - name: Install dependencies
         run: flutter pub get
 
-      # 5. 设置 Android SDK 并自动接受许可证
+      # 6. 设置 Android SDK 并自动接受许可证
       - name: Setup Android SDK and auto-accept licenses
         uses: android-actions/setup-android@v3
 
-      # 6. 强制替换 build.gradle 中的 buildToolsVersion
+      # 7. 强制替换 build.gradle 中的 buildToolsVersion
       - name: Force replace buildToolsVersion in build.gradle
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
@@ -54,11 +64,11 @@ jobs:
           echo "--- Verifying build.gradle buildToolsVersion ---"
           grep "buildToolsVersion" $TARGET_FILE
 
-      # 7. 清理项目
+      # 8. 清理项目
       - name: Clean project
         run: flutter clean
 
-      # 8. 生成递增版本标签
+      # 9. 生成递增版本标签
       - name: Generate incremental version tag
         id: version
         run: |
@@ -68,61 +78,51 @@ jobs:
           echo "Generated version: $NEW_TAG"
         shell: bash
 
-      # 9. 更新 pubspec.yaml 中的应用版本号
+      # 10. 更新 pubspec.yaml 中的应用版本号
       - name: Update pubspec.yaml app version
         run: |
           VERSION_NUMBER=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
           BUILD_NUMBER=$(( $(git rev-list --count HEAD) + 1000 ))
-          # 修正：为 yq -i 命令添加 -y 参数
-          yq -i -y ".version = \"${VERSION_NUMBER}+${BUILD_NUMBER}\"" pubspec.yaml
+          # 使用新版 yq 的标准语法
+          yq eval -i ".version = \"${VERSION_NUMBER}+${BUILD_NUMBER}\"" pubspec.yaml
           echo "Updated pubspec.yaml version to ${VERSION_NUMBER}+${BUILD_NUMBER}"
+          yq eval '.version' pubspec.yaml
 
-      # 10. 检查并恢复签名密钥
+      # 11. 检查并恢复签名密钥
       - name: Check and Restore Keystore
         id: restore_keystore
         run: |
           if [[ -n "${{ secrets.KEYSTORE_BASE64 }}" && -n "${{ secrets.KEYSTORE_KEY_ALIAS }}" && -n "${{ secrets.KEYSTORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
             echo "All keystore secrets found. Restoring keystore..."
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-            echo "Keystore restored."
             echo "signed=true" >> $GITHUB_OUTPUT
           else
             echo "One or more keystore secrets are missing. Skipping keystore restore."
             echo "signed=false" >> $GITHUB_OUTPUT
           fi
 
-      # 11. 打包并签名 Android App
+      # 12. 打包并签名 Android App
       - name: Build and Sign Android App
         env:
           KEYSTORE_KEY_ALIAS: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEYSTORE_KEY_ALIAS || '' }}
           KEYSTORE_PASSWORD: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEYSTORE_PASSWORD || '' }}
           KEY_PASSWORD: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEY_PASSWORD || '' }}
         run: |
-          if [ "${{ steps.restore_keystore.outputs.signed }}" == "true" ]; then
-            echo "Attempting to build SIGNED APK..."
-          else
-            echo "Secrets not provided or keystore restore failed. Attempting to build UNSIGNED APK..."
-          fi
+          if [ "${{ steps.restore_keystore.outputs.signed }}" == "true" ]; then echo "Attempting to build SIGNED APK..."; else echo "Attempting to build UNSIGNED APK..."; fi
           flutter build apk --release --split-per-abi
 
-      # 12. 查找构建产物 (APK)
+      # 后续步骤保持不变...
       - name: Find Release APK
         id: find_apk
         run: |
           APK_PATH=$(find build/app/outputs/flutter-apk -name "app-*-release.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then echo "Error: Release APK not found!"; exit 1; fi
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK at: $APK_PATH"
-      
-      # 13. 上传构建产物 (Artifact)
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apks
           path: ${{ steps.find_apk.outputs.apk_path }}
-          retention-days: 7
-
-      # 14. 提交 pubspec.yaml 的版本更新
       - name: Commit and push version changes
         run: |
           git config --global user.name 'github-actions[bot]'
@@ -131,8 +131,6 @@ jobs:
           if git diff --staged --quiet; then echo "No changes to commit."; else git commit -m "chore: bump version to ${{ env.NEW_TAG }} and align configs"; git push; fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 15. 创建 GitHub Release 并上传产物
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -142,8 +140,6 @@ jobs:
             🎉 **Release ${{ env.NEW_TAG }}**
             - Signed APK: ${{ steps.restore_keystore.outputs.signed }}
             - Commit: `${{ github.sha }}`
-          draft: false
-          prerelease: false
           files: ${{ steps.find_apk.outputs.apk_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
