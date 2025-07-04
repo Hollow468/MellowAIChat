@@ -24,7 +24,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.23.5'
+          flutter-version: '3.22.5'
           channel: 'stable'
 
       - name: Cache Flutter dependencies
@@ -56,7 +56,7 @@ jobs:
           if [ -d "android" ]; then chmod -R 777 android/ || echo "Failed, continuing..."; fi
           if [ -f "android/gradlew" ]; then chmod +x android/gradlew || echo "Failed, continuing..."; else echo "gradlew not found"; fi
         working-directory: ./
-        continue-on-error: true
+        continue-on-error:
 
       - name: Clean and regenerate build files
         run: |
@@ -100,18 +100,28 @@ jobs:
           fi
         working-directory: ./
 
+      # 检查密钥库相关 secrets 是否存在
+      - name: Check keystore secrets
+        id: check_secrets
+        run: |
+          if [ -n "${{ secrets.KEYSTORE }}" ] && [ -n "${{ secrets.KEYSTORE_KEY_ALIAS }}" ] && [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ] && [ -n "${{ secrets.KEY_PASSWORD }}" ]; then
+            echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
+          else
+            echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
+          fi
+
       - name: Restore keystore if available
-        if: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
+        if: env.HAS_KEYSTORE == 'true'
         run: |
           echo "${{ secrets.KEYSTORE }}" | base64 -d > android/app/keystore.jks
+          ls -l android/app/keystore.jks || echo "Failed to restore keystore"
         working-directory: ./
         continue-on-error: true
 
       - name: Build Android APK
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
         run: |
-          if [ "$HAS_KEYSTORE" = "true" ] && [ -f "android/app/keystore.jks" ]; then
+          if [ "${{ env.HAS_KEYSTORE }}" = "true" ] && [ -f "android/app/keystore.jks" ]; then
+            echo "Building signed APK..."
             flutter build apk --release \
               --build-name=${{ env.NEW_TAG }} \
               --build-number=$(( $(git rev-list --count HEAD) + 1000 )) \
@@ -120,6 +130,7 @@ jobs:
               --keystore-password=${{ secrets.KEYSTORE_PASSWORD }} \
               --key-password=${{ secrets.KEY_PASSWORD }}
           else
+            echo "No keystore found or incomplete secrets, building unsigned APK..."
             flutter build apk --release \
               --build-name=${{ env.NEW_TAG }} \
               --build-number=$(( $(git rev-list --count HEAD) + 1000 ))
@@ -127,7 +138,7 @@ jobs:
         working-directory: ./
 
       - name: Clean up keystore
-        if: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
+        if: env.HAS_KEYSTORE == 'true'
         run: rm -f android/app/keystore.jks
         working-directory: ./
         continue-on-error: true
@@ -157,7 +168,7 @@ jobs:
           name: Release ${{ env.NEW_TAG }}
           body: |
             Automated Flutter Android APK release.
-            Signed: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD && 'true' || 'false' }}
+            Signed: ${{ env.HAS_KEYSTORE }}
             Commit: ${{ github.sha }}
           draft: false
           prerelease: false
