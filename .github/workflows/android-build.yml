@@ -26,7 +26,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.5'  # 注意：您使用的版本是 3.32.5，请确认是否为最新版本
+          flutter-version: '3.32.5'
           channel: 'stable'
 
       # 调试：列出项目文件
