@@ -1,3 +1,5 @@
+# .github/workflows/release.yml
+
 name: 打包并发布
 
 on:
@@ -8,122 +10,159 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 检出仓库代码
+      # 1. 检出仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }} # 确保检出时使用正确的权限
-          fetch-depth: 0 # 获取完整历史以便检查所有标签
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      # 设置 Flutter 环境
+      # 2. 设置 Flutter 环境
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.5' # 保持 3.32.5，确保 Dart SDK 兼容
+          flutter-version: '3.22.2'
           channel: 'stable'
+          cache: true
 
-      # 缓存 Flutter 依赖以加速后续构建
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-
-
-      # 获取 Flutter 依赖
+      # 3. 获取 Flutter 依赖
       - name: Install dependencies
         run: flutter pub get
         working-directory: ./
 
-      # 清理并重新生成构建文件
-      - name: Clean and regenerate build files
+      # 4. 设置 Android SDK 并自动接受许可证
+      - name: Setup Android SDK and auto-accept licenses
+        uses: android-actions/setup-android@v3
+
+      # =================================================================
+      # 5.【新增步骤】强制替换 build.gradle 中的 buildToolsVersion
+      #    您可以在这里定义权威的构建工具版本。
+      - name: Force replace buildToolsVersion in build.gradle
+        env:
+          # 在这里定义你希望强制使用的构建工具版本
+          BUILD_TOOLS_VERSION: "34.0.0"
         run: |
-          flutter clean
-          flutter pub get
+          TARGET_FILE="android/app/build.gradle"
+          echo "Forcing buildToolsVersion to ${{ env.BUILD_TOOLS_VERSION }} in $TARGET_FILE"
+          
+          if [ -f "$TARGET_FILE" ]; then
+            # 使用 sed 命令进行替换。这个正则表达式会匹配 "buildToolsVersion" 后面跟着的任意版本号字符串
+            sed -i -E "s/buildToolsVersion \".*\"/buildToolsVersion \"${{ env.BUILD_TOOLS_VERSION }}\"/" $TARGET_FILE
+            echo "Replacement complete."
+            
+            # 验证替换结果
+            echo "--- Verifying file content ---"
+            grep "buildToolsVersion" $TARGET_FILE
+            echo "------------------------------"
+          else
+            echo "Error: $TARGET_FILE not found!"
+            exit 1
+          fi
+      # =================================================================
+
+      # 6. 清理项目
+      - name: Clean project
+        run: flutter clean
         working-directory: ./
 
-      # 生成递增版本标签
+      # 7. 生成递增版本标签
       - name: Generate incremental version tag
         id: version
         run: |
-          # 获取所有以 v1. 开头的标签并按版本号排序
-          LATEST_TAG=$(git tag -l 'v1.*' | sort -V | tail -n 1)
+          echo "Generating version tag..."
+          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -n 1)
           if [ -z "$LATEST_TAG" ]; then
-            # 如果没有标签，从 v1.0.0 开始
             NEW_TAG="v1.0.0"
           else
-            # 解析最新标签的版本号（格式 v1.x.y）
-            VERSION=$(echo $LATEST_TAG | sed 's/v1\.//')
-            MAJOR=1
-            MINOR=$(echo $VERSION | cut -d. -f1)
-            PATCH=$(echo $VERSION | cut -d. -f2)
-            # 递增补丁版本，如果达到 9，则递增次版本并重置补丁版本
+            VERSION_PARTS=(${LATEST_TAG//./ })
+            MAJOR=$(echo ${VERSION_PARTS[0]} | sed 's/v//')
+            MINOR=${VERSION_PARTS[1]}
+            PATCH=${VERSION_PARTS[2]}
             if [ $PATCH -ge 9 ]; then
-              MINOR=$((MINOR + 1))
               PATCH=0
+              MINOR=$((MINOR + 1))
             else
               PATCH=$((PATCH + 1))
             fi
-            NEW_TAG="v1.$MINOR.$PATCH"
+            NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           fi
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+          echo "Generated version: $NEW_TAG"
         shell: bash
 
-      # 更新 pubspec.yaml 中的版本号
+      # 8. 更新 pubspec.yaml 中的版本号
       - name: Update pubspec.yaml version
         run: |
-          # 从 NEW_TAG 中去掉 'v' 前缀以匹配 pubspec.yaml 的版本号格式（x.y.z）
-          VERSION=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
-          PUBSPEC_FILE="pubspec.yaml"
-          # 检查 pubspec.yaml 是否存在
-          if [ -f "$PUBSPEC_FILE" ]; then
-            # 使用 sed 更新 version 字段（假设格式为 version: x.y.z 或 version: x.y.z+build）
-            sed -i "s/version: [0-9]\+\.[0-9]\+\.[0-9]\+\(+[0-9]\+\)\?/version: $VERSION/" "$PUBSPEC_FILE"
-            echo "Updated pubspec.yaml version to $VERSION"
-          else
-            echo "pubspec.yaml not found!"
+          VERSION_NUMBER=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
+          BUILD_NUMBER=$(( $(git rev-list --count HEAD) + 1000 ))
+          pip install yq
+          yq -i ".version = \"${VERSION_NUMBER}+${BUILD_NUMBER}\"" pubspec.yaml
+          echo "Updated pubspec.yaml version to ${VERSION_NUMBER}+${BUILD_NUMBER}"
+          cat pubspec.yaml
+        working-directory: ./
+
+      # 9. 恢复签名密钥
+      - name: Restore keystore if available
+        if: ${{ secrets.KEYSTORE_BASE64 && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
+        run: |
+          echo "Restoring keystore..."
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          echo "Keystore restored."
+        working-directory: ./
+
+      # 10. 打包并签名 Android App
+      - name: Build Android App
+        run: flutter build apk --release --split-per-abi
+        working-directory: ./
+
+      # 11. 查找构建产物 (APK)
+      - name: Find Release APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find build/app/outputs/flutter-apk -name "app-*-release.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: Release APK not found!"
             exit 1
           fi
-        working-directory: ./
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK at: $APK_PATH"
 
-      # 打包 Android APK（发布模式）
-      - name: Build Android APK
-        run: |
-          flutter build apk --release
-        working-directory: ./
-
-      # 上传 APK 作为 artifact
+      # 12. 上传构建产物 (Artifact)
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7 # artifact 保留 7 天
+          name: app-release-apks
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 7
 
-      # 提交 pubspec.yaml 更改到仓库
-      - name: Commit and push changes
+      # 13. 提交 pubspec.yaml 的版本更新
+      - name: Commit and push version changes
         run: |
-          git config --global user.name 'GitHub Action'
-          git config --global user.email 'actions@github.com'
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add pubspec.yaml
-          git commit -m "Update pubspec.yaml version to ${{ env.NEW_TAG }}" || echo "No changes to commit"
-          git push origin HEAD
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: bump version to ${{ env.NEW_TAG }}"
+            git push
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 创建 GitHub Release 并上传 APK
+      # 14. 创建 GitHub Release 并上传产物
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.NEW_TAG }} # 使用动态生成的标签
+          tag_name: ${{ env.NEW_TAG }}
           name: Release ${{ env.NEW_TAG }}
           body: |
+            🎉 **Release ${{ env.NEW_TAG }}**
+
             Automated release of Flutter Android APK.
-            Generated from commit: ${{ github.sha }}
+            Commit: `${{ github.sha }}`
           draft: false
           prerelease: false
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: ${{ steps.find_apk.outputs.apk_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
