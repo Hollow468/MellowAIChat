@@ -57,18 +57,18 @@ jobs:
       - name: Clean project
         run: flutter clean
 
-      # 8. 生成递增版本标签 (保持不变)
+      # 8. 生成递增版本标签
       - name: Generate incremental version tag
         id: version
+        # ... (版本生成逻辑保持不变)
         run: |
-          # ... (您的版本生成逻辑)
           LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -n 1)
           if [ -z "$LATEST_TAG" ]; then NEW_TAG="v1.0.0"; else VERSION_PARTS=(${LATEST_TAG//./ }); MAJOR=$(echo ${VERSION_PARTS[0]} | sed 's/v//'); MINOR=${VERSION_PARTS[1]}; PATCH=${VERSION_PARTS[2]}; if [ $PATCH -ge 9 ]; then PATCH=0; MINOR=$((MINOR + 1)); else PATCH=$((PATCH + 1)); fi; NEW_TAG="v$MAJOR.$MINOR.$PATCH"; fi
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
           echo "Generated version: $NEW_TAG"
         shell: bash
 
-      # 9. 更新 pubspec.yaml 中的应用版本号 (保持不变)
+      # 9. 更新 pubspec.yaml 中的应用版本号
       - name: Update pubspec.yaml app version
         run: |
           VERSION_NUMBER=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
@@ -76,51 +76,60 @@ jobs:
           yq -i ".version = \"${VERSION_NUMBER}+${BUILD_NUMBER}\"" pubspec.yaml
           echo "Updated pubspec.yaml version to ${VERSION_NUMBER}+${BUILD_NUMBER}"
 
-      # ================== 修复后的签名和构建步骤 ==================
+      # ================== 【终极修复方案】 ==================
 
-      # 10. 恢复签名密钥
-      # 修复了 if 条件，使其更稳健
-      - name: Restore keystore
+      # 10. 检查并恢复签名密钥
+      # 移除 step.if, 将逻辑移入 run 脚本内部，并使用 outputs 输出结果
+      - name: Check and Restore Keystore
         id: restore_keystore
-        if: |
-          secrets.KEYSTORE_BASE64 != '' &&
-          secrets.KEYSTORE_KEY_ALIAS != '' &&
-          secrets.KEYSTORE_PASSWORD != '' &&
-          secrets.KEY_PASSWORD != ''
         run: |
-          echo "Restoring keystore from secrets..."
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-          echo "Keystore restored."
+          # 在 shell 脚本内部安全地检查 secrets
+          if [[ -n "${{ secrets.KEYSTORE_BASE64 }}" && \
+                -n "${{ secrets.KEYSTORE_KEY_ALIAS }}" && \
+                -n "${{ secrets.KEYSTORE_PASSWORD }}" && \
+                -n "${{ secrets.KEY_PASSWORD }}" ]]; then
+            
+            echo "All keystore secrets found. Restoring keystore..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+            echo "Keystore restored."
+            
+            # 使用 step output 输出结果，通知后续步骤
+            echo "signed=true" >> $GITHUB_OUTPUT
+            
+          else
+            echo "One or more keystore secrets are missing. Skipping keystore restore."
+            echo "signed=false" >> $GITHUB_OUTPUT
+          fi
 
       # 11. 打包并签名 Android App
-      # 关键修复：将 secrets 作为环境变量注入，供 build.gradle 使用
+      # 根据上一步的输出 (outputs.signed) 来决定注入哪些环境变量
       - name: Build and Sign Android App
-        # 仅当上一步 "restore_keystore" 成功执行时，才注入环境变量
         env:
-          KEYSTORE_KEY_ALIAS: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEYSTORE_KEY_ALIAS || '' }}
-          KEYSTORE_PASSWORD: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEYSTORE_PASSWORD || '' }}
-          KEY_PASSWORD: ${{ steps.restore_keystore.outcome == 'success' && secrets.KEY_PASSWORD || '' }}
+          # 使用三元表达式逻辑，仅当需要签名时才设置环境变量
+          KEYSTORE_KEY_ALIAS: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEYSTORE_KEY_ALIAS || '' }}
+          KEYSTORE_PASSWORD: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEYSTORE_PASSWORD || '' }}
+          KEY_PASSWORD: ${{ steps.restore_keystore.outputs.signed == 'true' && secrets.KEY_PASSWORD || '' }}
         run: |
-          if [ "${{ steps.restore_keystore.outcome }}" == "success" ]; then
+          # 根据上一步的结果打印日志
+          if [ "${{ steps.restore_keystore.outputs.signed }}" == "true" ]; then
             echo "Attempting to build SIGNED APK..."
           else
             echo "Secrets not provided or keystore restore failed. Attempting to build UNSIGNED APK..."
           fi
+          
+          # 执行构建。build.gradle 会根据是否存在环境变量来决定是否签名
           flutter build apk --release --split-per-abi
 
-      # ==========================================================
-
+      # ========================================================
+      
       # 12. 查找构建产物 (APK)
       - name: Find Release APK
         id: find_apk
         run: |
-          # ... (保持不变)
           APK_PATH=$(find build/app/outputs/flutter-apk -name "app-*-release.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then echo "Error: Release APK not found!"; exit 1; fi
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK at: $APK_PATH"
-
-      # ... (后续上传和发布步骤保持不变)
       
       # 13. 上传构建产物 (Artifact)
       - name: Upload APK artifact
@@ -148,7 +157,7 @@ jobs:
           name: Release ${{ env.NEW_TAG }}
           body: |
             🎉 **Release ${{ env.NEW_TAG }}**
-            - Signed APK: ${{ steps.restore_keystore.outcome == 'success' }}
+            - Signed APK: ${{ steps.restore_keystore.outputs.signed }}
             - Commit: `${{ github.sha }}`
           draft: false
           prerelease: false
