@@ -1,184 +1,6 @@
 name: 打包并发布
 
 on:
-  workflow_dispatch: # 手动触发工作流
-
-jobs:
-  rebuild-android:
-    runs-on: ubuntu-latest
-
-    steps:
-      # 检出仓库代码
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      # 设置 Java 环境（强制使用最新版）
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'adopt'
-          java-version: '17'  # 使用最新稳定版本（2025年7月，JDK 17为长期支持版）
-          check-latest: true  # 确保获取最新次要版本
-
-      # 设置 Flutter 环境
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.5'  # 请确认是否需要更新为最新版本
-          channel: 'stable'
-
-      # 调试：列出项目文件
-      - name: Debug - List project files
-        run: |
-          echo "Listing project files:"
-          ls -la
-          echo "Checking pubspec.yaml:"
-          ls -l pubspec.yaml || echo "pubspec.yaml not found"
-        working-directory: ./
-
-      # 缓存 Flutter 依赖
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: ${{ runner.os }}-flutter-
-
-      # 获取 Flutter 依赖
-      - name: Install dependencies
-        run: flutter pub get
-        working-directory: ./
-        continue-on-error: true
-
-      # 检查并自动授权 Android SDK 许可（仅在需要时）
-      - name: Check and accept Android SDK licenses
-        run: |
-          echo "Checking Android SDK licenses..."
-          if [ -d "$ANDROID_HOME" ] && ! sdkmanager --licenses --sdk_root="$ANDROID_HOME" | grep -q "All SDK package licenses accepted"; then
-            echo "Accepting Android SDK licenses..."
-            yes | sdkmanager --licenses --sdk_root="$ANDROID_HOME" || echo "Failed to accept licenses, continuing..."
-          else
-            echo "All SDK licenses already accepted, skipping..."
-          fi
-        env:
-          ANDROID_HOME: $HOME/android-sdk
-        continue-on-error: true
-
-      # 清理并重新生成构建文件
-      - name: Clean and regenerate build files
-        run: |
-          flutter clean || echo "Flutter clean failed, continuing..."
-          flutter pub get
-        working-directory: ./
-        continue-on-error: true
-
-      # 生成递增版本标签
-      - name: Generate incremental version tag
-        id: version
-        run: |
-          echo "Generating version tag..."
-          LATEST_TAG=$(git tag -l 'v1.*' | sort -V | tail -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            NEW_TAG="v1.0.0"
-          else
-            VERSION=$(echo $LATEST_TAG | sed 's/v1\.//')
-            MAJOR=1
-            MINOR=$(echo $VERSION | cut -d. -f1)
-            PATCH=$(echo $VERSION | cut -d. -f2)
-            if [ $PATCH -ge 9 ]; then
-              MINOR=$((MINOR + 1))
-              PATCH=0
-            else
-              PATCH=$((PATCH + 1))
-            fi
-            NEW_TAG="v1.$MINOR.$PATCH"
-          fi
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
-          echo "Generated version: $NEW_TAG"
-        shell: bash
-
-      # 更新 pubspec.yaml 中的版本号
-      - name: Update pubspec.yaml version
-        run: |
-          VERSION=$(echo ${{ env.NEW_TAG }} | sed 's/v//')
-          PUBSPEC_FILE="pubspec.yaml"
-          if [ -f "$PUBSPEC_FILE" ]; then
-            sed -i "s/version: [0-9]\+\.[0-9]\+\.[0-9]\+\(+[0-9]\+\)\?/version: $VERSION/" "$PUBSPEC_FILE"
-            echo "Updated pubspec.yaml version to $VERSION"
-            cat $PUBSPEC_FILE
-          else
-            echo "Error: pubspec.yaml not found!"
-            exit 1
-          fi
-        working-directory: ./
-
-      # 检查是否提供密钥库并恢复
-      - name: Restore keystore if available
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
-        if: ${{ env.HAS_KEYSTORE == 'true' }}
-        run: |
-          echo "Restoring keystore..."
-          echo "${{ secrets.KEYSTORE }}" | base64 -d > android/app/keystore.jks
-          ls -l android/app/keystore.jks || echo "Failed to restore keystore"
-        working-directory: ./
-        continue-on-error: true
-
-      # 确保 Android 构建所需权限（仅在需要时）
-      - name: Ensure Android build permissions
-        run: |
-          echo "Granting permissions for Android build..."
-          if [ -d "android" ]; then
-            chmod -R 777 android/ || echo "Failed to set permissions, continuing..."
-          fi
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew || echo "Failed to make gradlew executable, continuing..."
-          else
-            echo "gradlew not found, skipping..."
-          fi
-        working-directory: ./
-        continue-on-error: true
-
-      # 打包并签名 Android APK
-      - name: Build Android APK
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
-        run: |
-          if [ "$HAS_KEYSTORE" = "true" ] && [ -f "android/app/keystore.jks" ]; then
-            echo "Building signed APK..."
-            flutter build apk --release \
-              --build-name=${{ env.NEW_TAG }} \
-              --build-number=$(( $(git rev-list --count HEAD) + 1000 )) \
-              --keystore-path=android/app/keystore.jks \
-              --keystore-key-alias=${{ secrets.KEYSTORE_KEY_ALIAS }} \
-              --keystore-password=${{ secrets.KEYSTORE_PASSWORD }} \
-              --key-password=${{ secrets.KEY_PASSWORD }}
-          else
-            echo "No keystore found or incomplete secrets, building unsigned APK..."
-            flutter build apk --release \
-              --build-name=${{ env.NEW_TAG }} \
-              --build-number=$(( $(git rev-list --count HEAD) + 1000 ))
-          fi
-        working-directory: ./
-
-      # 清理密钥库文件
-      - name: Clean up keystore
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
-        if: ${{ env.HAS_KEYSTORE == 'true' }}
-
-
-System: * The response was cut off because it exceeded the maximum allowed length. I’ve generated a concise version that addresses your requirements while staying within limits. If you need the full response or further details, please let me know! *
-
----
-
-```yaml
-name: 打包并发布
-
-on:
   workflow_dispatch:
 
 jobs:
@@ -196,13 +18,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'adopt'
-          java-version: '17'  # Force latest LTS version
+          java-version: '17'
           check-latest: true
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.5'  # Update if needed
+          flutter-version: '3.22.5'
           channel: 'stable'
 
       - name: Cache Flutter dependencies
@@ -335,7 +157,7 @@ jobs:
           name: Release ${{ env.NEW_TAG }}
           body: |
             Automated Flutter Android APK release.
-            Signed: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD }}
+            Signed: ${{ secrets.KEYSTORE && secrets.KEYSTORE_KEY_ALIAS && secrets.KEYSTORE_PASSWORD && secrets.KEY_PASSWORD && 'true' || 'false' }}
             Commit: ${{ github.sha }}
           draft: false
           prerelease: false
